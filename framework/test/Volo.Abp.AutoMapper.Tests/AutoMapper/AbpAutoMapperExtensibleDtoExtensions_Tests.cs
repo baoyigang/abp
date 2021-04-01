@@ -34,10 +34,35 @@ namespace AutoMapper
 
             personDto.GetProperty<string>("Name").ShouldBe("John"); //Defined in both classes
             personDto.GetProperty<string>("ExistingDtoProperty").ShouldBe("existing-value"); //Should not clear existing values
+            personDto.GetProperty<int>("ChildCount").ShouldBe(0); //Not defined in the source, but was set to the default value by ExtensibleTestPersonDto constructor
+            personDto.GetProperty("CityName").ShouldBeNull(); //Ignored, but was set to the default value by ExtensibleTestPersonDto constructor
             personDto.HasProperty("Age").ShouldBeFalse(); //Not defined on the destination
-            personDto.HasProperty("ChildCount").ShouldBeFalse(); //Not defined in the source
             personDto.HasProperty("Sex").ShouldBeFalse(); //Not defined in both classes
-            personDto.HasProperty("CityName").ShouldBeFalse(); //Ignored
+        }
+
+        [Fact]
+        public void MapExtraProperties_Also_Should_Map_To_RegularProperties()
+        {
+            var person = new ExtensibleTestPerson()
+                .SetProperty("Name", "John")
+                .SetProperty("Age", 42);
+
+            var personDto = new ExtensibleTestPersonWithRegularPropertiesDto()
+                .SetProperty("IsActive", true);
+
+            _objectMapper.Map(person, personDto);
+
+            //Defined in both classes
+            personDto.HasProperty("Name").ShouldBe(false);
+            personDto.Name.ShouldBe("John");
+
+            //Defined in both classes
+            personDto.HasProperty("Age").ShouldBe(false);
+            personDto.Age.ShouldBe(42);
+
+            //Should not clear existing values
+            personDto.HasProperty("IsActive").ShouldBe(false);
+            personDto.IsActive.ShouldBe(true);
         }
     }
 }

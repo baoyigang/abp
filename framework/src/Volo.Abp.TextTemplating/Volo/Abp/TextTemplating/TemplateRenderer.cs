@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Options;
 using Scriban;
 using Scriban.Runtime;
 using Volo.Abp.DependencyInjection;
@@ -136,20 +137,26 @@ namespace Volo.Abp.TextTemplating
                 scriptObject["model"] = model;
             }
 
-            if (templateDefinition.LocalizationResource != null)
+            var localizer = GetLocalizerOrNull(templateDefinition);
+            if (localizer != null)
             {
-                var localizer = _stringLocalizerFactory.Create(templateDefinition.LocalizationResource);
-                scriptObject.Import(
-                    "L",
-                    new Func<string, string>(
-                        name => localizer[name]
-                    )
-                );
+                scriptObject.SetValue("L", new TemplateLocalizer(localizer), true);
             }
 
             context.PushGlobal(scriptObject);
+            context.PushCulture(System.Globalization.CultureInfo.CurrentCulture);
 
             return context;
+        }
+
+        private IStringLocalizer GetLocalizerOrNull(TemplateDefinition templateDefinition)
+        {
+            if (templateDefinition.LocalizationResource != null)
+            {
+                return _stringLocalizerFactory.Create(templateDefinition.LocalizationResource);
+            }
+
+            return _stringLocalizerFactory.CreateDefaultOrNull();
         }
     }
 }

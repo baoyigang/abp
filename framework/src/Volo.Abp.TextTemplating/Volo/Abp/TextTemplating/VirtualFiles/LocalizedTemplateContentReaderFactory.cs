@@ -1,53 +1,43 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 using Volo.Abp.DependencyInjection;
+using Volo.Abp.Threading;
 using Volo.Abp.VirtualFileSystem;
 
 namespace Volo.Abp.TextTemplating.VirtualFiles
 {
     public class LocalizedTemplateContentReaderFactory : ILocalizedTemplateContentReaderFactory, ISingletonDependency
     {
-        private readonly IVirtualFileProvider _virtualFileProvider;
-        private readonly Dictionary<string, ILocalizedTemplateContentReader> _readerCache;
-        private readonly ReaderWriterLockSlim _lock;
+        protected IVirtualFileProvider VirtualFileProvider { get; }
+        protected ConcurrentDictionary<string, ILocalizedTemplateContentReader> ReaderCache { get; }
+        protected SemaphoreSlim SyncObj;
 
         public LocalizedTemplateContentReaderFactory(IVirtualFileProvider virtualFileProvider)
         {
-            _virtualFileProvider = virtualFileProvider;
-            _readerCache = new Dictionary<string, ILocalizedTemplateContentReader>();
-            _lock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+            VirtualFileProvider = virtualFileProvider;
+            ReaderCache = new ConcurrentDictionary<string, ILocalizedTemplateContentReader>();
+            SyncObj = new SemaphoreSlim(1, 1);
         }
 
-        public async Task<ILocalizedTemplateContentReader> CreateAsync(TemplateDefinition templateDefinition)
+        public virtual async Task<ILocalizedTemplateContentReader> CreateAsync(TemplateDefinition templateDefinition)
         {
-            _lock.EnterUpgradeableReadLock();
-
-            try
+            if (ReaderCache.TryGetValue(templateDefinition.Name, out var reader))
             {
-                var reader = _readerCache.GetOrDefault(templateDefinition.Name);
-                if (reader != null)
-                {
-                    return reader;
-                }
-
-                _lock.EnterWriteLock();
-
-                try
-                {
-                    reader = await CreateInternalAsync(templateDefinition);
-                    _readerCache[templateDefinition.Name] = reader;
-                    return reader;
-                }
-                finally
-                {
-                    _lock.ExitWriteLock();
-                }
+                return reader;
             }
-            finally
+
+            using (await SyncObj.LockAsync())
             {
-                _lock.ExitUpgradeableReadLock();
+                if (ReaderCache.TryGetValue(templateDefinition.Name, out reader))
+                {
+                    return reader;
+                }
+
+                reader = await CreateInternalAsync(templateDefinition);
+                ReaderCache[templateDefinition.Name] = reader;
+                return reader;
             }
         }
 
@@ -60,16 +50,22 @@ namespace Volo.Abp.TextTemplating.VirtualFiles
                 return NullLocalizedTemplateContentReader.Instance;
             }
 
-            var fileInfo = _virtualFileProvider.GetFileInfo(virtualPath);
+            var fileInfo = VirtualFileProvider.GetFileInfo(virtualPath);
             if (!fileInfo.Exists)
             {
-                throw new AbpException("Could not find a file/folder at the location: " + virtualPath);
+                var directoryContents = VirtualFileProvider.GetDirectoryContents(virtualPath);
+                if (!directoryContents.Exists)
+                {
+                    throw new AbpException("Could not find a file/folder at the location: " + virtualPath);
+                }
+
+                fileInfo = new VirtualDirectoryFileInfo(virtualPath, virtualPath, DateTimeOffset.UtcNow);
             }
 
             if (fileInfo.IsDirectory)
             {
                 var folderReader = new VirtualFolderLocalizedTemplateContentReader();
-                await folderReader.ReadContentsAsync(_virtualFileProvider, virtualPath);
+                await folderReader.ReadContentsAsync(VirtualFileProvider, virtualPath);
                 return folderReader;
             }
             else //File

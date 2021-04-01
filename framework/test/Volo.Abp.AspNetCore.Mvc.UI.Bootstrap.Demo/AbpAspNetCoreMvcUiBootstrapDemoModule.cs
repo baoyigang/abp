@@ -23,8 +23,8 @@ namespace Volo.Abp.AspNetCore.Mvc.UI.Bootstrap.Demo
             }
 
             app.UseRouting();
-            app.UseVirtualFiles();
-            app.UseMvcWithDefaultRouteAndArea();
+            app.UseStaticFiles();
+            app.UseConfiguredEndpoints();
         }
     }
 }

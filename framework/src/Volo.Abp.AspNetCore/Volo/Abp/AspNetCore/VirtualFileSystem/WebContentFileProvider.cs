@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using JetBrains.Annotations;
 using Microsoft.AspNetCore.Hosting;
@@ -15,7 +16,7 @@ namespace Volo.Abp.AspNetCore.VirtualFileSystem
         private readonly IVirtualFileProvider _virtualFileProvider;
         private readonly IFileProvider _fileProvider;
         private readonly IWebHostEnvironment _hostingEnvironment;
-        private string _rootPath = "/wwwroot"; //TODO: How to handle wwwroot naming?
+        private string _rootPath = "/wwwroot";
 
         protected AbpAspNetCoreContentOptions Options { get; }
 
@@ -91,9 +92,14 @@ namespace Volo.Abp.AspNetCore.VirtualFileSystem
 
         protected virtual IFileProvider CreateFileProvider()
         {
-            return new CompositeFileProvider(
+            var fileProviders = new List<IFileProvider>
+            {
                 new PhysicalFileProvider(_hostingEnvironment.ContentRootPath),
                 _virtualFileProvider
+            };
+
+            return new CompositeFileProvider(
+                fileProviders
             );
         }
 

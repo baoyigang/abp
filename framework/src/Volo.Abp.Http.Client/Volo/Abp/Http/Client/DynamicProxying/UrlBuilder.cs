@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -7,7 +8,6 @@ using JetBrains.Annotations;
 using Volo.Abp.Http.Modeling;
 using Volo.Abp.Http.ProxyScripting.Generators;
 using Volo.Abp.Localization;
-using Volo.Abp.Reflection;
 
 namespace Volo.Abp.Http.Client.DynamicProxying
 {
@@ -81,9 +81,10 @@ namespace Volo.Abp.Http.Client.DynamicProxying
                     continue;
                 }
 
-                AddQueryStringParameter(urlBuilder, isFirstParam, queryStringParameter.Name, value);
-
-                isFirstParam = false;
+                if (AddQueryStringParameter(urlBuilder, isFirstParam, queryStringParameter.Name, value))
+                {
+                    isFirstParam = false;
+                }
             }
 
             if (apiVersion.ShouldSendInQueryString())
@@ -92,15 +93,37 @@ namespace Volo.Abp.Http.Client.DynamicProxying
             }
         }
 
-        private static void AddQueryStringParameter(
+        private static bool AddQueryStringParameter(
             StringBuilder urlBuilder,
             bool isFirstParam,
             string name,
             [NotNull] object value)
         {
-            urlBuilder.Append(isFirstParam ? "?" : "&");
+            if (value.GetType().IsArray || (value.GetType().IsGenericType && value is IEnumerable))
+            {
+                var index = 0;
+                foreach (var item in (IEnumerable) value)
+                {
+                    if (index == 0)
+                    {
+                        urlBuilder.Append(isFirstParam ? "?" : "&");
+                    }
+                    urlBuilder.Append(name + $"[{index++}]=" + System.Net.WebUtility.UrlEncode(ConvertValueToString(item)) + "&");
+                }
 
+                if (index > 0)
+                {
+                    //remove & at the end of the urlBuilder.
+                    urlBuilder.Remove(urlBuilder.Length - 1, 1);
+                    return true;
+                }
+
+                return false;
+            }
+
+            urlBuilder.Append(isFirstParam ? "?" : "&");
             urlBuilder.Append(name + "=" + System.Net.WebUtility.UrlEncode(ConvertValueToString(value)));
+            return true;
         }
 
         private static string ConvertValueToString([NotNull] object value)

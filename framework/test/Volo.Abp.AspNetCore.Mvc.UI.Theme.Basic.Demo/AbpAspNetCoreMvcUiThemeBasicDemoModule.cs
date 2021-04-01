@@ -55,9 +55,9 @@ namespace Volo.Abp.AspNetCore.Mvc.UI.Theme.Basic.Demo
                 app.UseDeveloperExceptionPage();
             }
 
-            app.UseVirtualFiles();
+            app.UseStaticFiles();
             app.UseRouting();
-            app.UseMvcWithDefaultRouteAndArea();
+            app.UseConfiguredEndpoints();
         }
     }
 }
